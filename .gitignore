@@ -137,4 +137,8 @@ ENV/
 .ropeproject
 
 # End of https://www.gitignore.io/api/linux,macos,python
-data/images
+# Ignore the dataset
+data/coco
+# Ignore .h5 files
+*.h5
+*.hdf5

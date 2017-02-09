@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_iterations', type=int, default=40000)
     parser.add_argument('--save_every', type=int, default=500)
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--coco_path', type=str, default='coco/ms-coco-256.h5')
+    parser.add_argument('--coco_path', type=str, default='data/coco/ms-coco-256.h5')
     parser.add_argument('--gram_dataset_path', type=str, default='grams.h5')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoint.h5')
     parser.add_argument('--gpu', type=str, default='')
