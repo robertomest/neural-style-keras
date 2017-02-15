@@ -40,7 +40,7 @@ def content_loss(x, target):
     '''
     Content loss is simply the MSE between activations of a layer
     '''
-    return K.mean(K.square(target - x))
+    return K.mean(K.square(target - x), axis=(1, 2, 3))
 
 
 def style_loss(x, target, norm_by_channels=False):
@@ -48,8 +48,7 @@ def style_loss(x, target, norm_by_channels=False):
     Style loss is the MSE between Gram matrices computed using activation maps.
     '''
     x_gram = gram_matrix(x, norm_by_channels=norm_by_channels)
-    return K.mean(K.square(target - x_gram))
-
+    return K.mean(K.square(target - x_gram), axis=(1, 2))
 
 
 def tv_loss(x):
@@ -59,7 +58,7 @@ def tv_loss(x):
     assert K.ndim(x) == 4
     a = K.square(x[:, :-1, :-1, :] - x[:, 1:, :-1, :])
     b = K.square(x[:, :-1, :-1, :] - x[:, :-1, 1:, :])
-    return K.sum(K.mean(a + b, axis=0))
+    return K.sum(a + b, axis=(1, 2, 3))
 
 
 def get_content_features(out_dict, layer_names):
@@ -105,3 +104,27 @@ def get_style_losses(outputs_dict, targets_dict, style_layers,
 def get_content_losses(outputs_dict, targets_dict, content_layers):
     return [content_loss(outputs_dict[l], targets_dict[l])
             for l in content_layers]
+
+def get_total_loss(content_losses, style_losses, total_var_loss,
+                   content_weights, style_weights, tv_weights, class_targets):
+    total_loss = K.variable(0.)
+
+    # Compute content losses
+    for loss in content_losses:
+        weighted_loss = K.mean(K.gather(content_weights, class_targets) * loss)
+        weighted_content_losses.append(weighted_loss)
+        total_loss += weighted_loss
+
+    # Compute style losses
+    for loss in style_losses:
+        weighted_loss = K.mean(K.gather(style_weights, class_targets) * loss)
+        weighted_style_losses.append(weighted_loss)
+        total_loss += weighted_loss
+
+    # Compute tv loss
+    weighted_tv_loss = K.mean(K.gather(tv_weights, class_targets) *
+                              total_var_loss)
+    total_loss += weighted_tv_loss
+
+    return (total_loss, weighted_content_losses, weighted_style_losses,
+            weighted_tv_loss)

@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
     with h5py.File(checkpoint_path + '.h5', 'r') as f:
         model_args = yaml.load(f.attrs['args'])
-        style_names = f.attrs['styles']
+        style_names = f.attrs['style_names']
 
     print('Creating pastiche model...')
     class_targets = K.placeholder(shape=(None,), dtype=tf.int32)
@@ -67,13 +67,15 @@ if __name__ == '__main__':
         for batch_idx in range(num_batches):
             idx = batch_idx * args.batch_size
 
+            batch = imgs[idx:idx + args.batch_size]
+            indices = batch_idx * args.batch_size + np.arange(batch.shape[0])
+
             if args.use_style_name:
                 names = style_names[idx:idx + args.batch_size]
             else:
                 names = indices
             print('  Processing styles %s' %str(names))
-            batch = imgs[idx:idx + args.batch_size]
-            indices = batch_idx * args.batch_size + np.arange(batch.shape[0])
+
             out = transfer_style([batch, indices, 0.])[0]
 
             for name, im in zip(names, out):

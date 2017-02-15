@@ -11,7 +11,7 @@ import keras.backend as K
 from keras.applications import vgg16
 
 from training import get_style_features
-from utils import preprocess_image_scale, config_gpu
+from utils import preprocess_image_scale, config_gpu, std_input_list
 
 import os
 import argparse
@@ -26,7 +26,9 @@ if __name__ == "__main__":
                         help='Directory that contains the images.')
     parser.add_argument('--gram_dataset_path', type=str, default='grams.h5',
                         help='Name of the output hdf5 file.')
-    parser.add_argument('--style_img_size', type=int, default=None,
+    parser.add_argument('--style_imgs', type=str, default=None, nargs='+',
+                        help='Style image file names.')
+    parser.add_argument('--style_img_size', type=int, default=[None], nargs='+',
                         help='Largest size of the style images')
     parser.add_argument('--style_layers', type=str, nargs='+', default=def_sl)
     parser.add_argument('--gpu', type=str, default='')
@@ -45,16 +47,24 @@ if __name__ == "__main__":
     gm_lists = [[] for l in args.style_layers]
 
     img_list = []
+    img_size_list = []
+    # Get style image names or get all images in the directory
+    if args.style_imgs is None:
+        args.style_imgs = os.listdir(args.style_dir)
 
-    for img_name in os.listdir(args.style_dir):
+    # Check the image sizes
+    args.style_img_size = std_input_list(args.style_img_size, len(args.style_imgs), 'Image size')
+
+    for img_name, img_size in zip(args.style_imgs, args.style_img_size):
         try:
             print(img_name)
             img = preprocess_image_scale(os.path.join(args.style_dir, img_name),
-                                         img_size=args.style_img_size)
+                                         img_size=img_size)
             s_targets = get_style_target([img])
             for l, t in zip(gm_lists, s_targets):
                 l.append(t)
             img_list.append(os.path.splitext(img_name)[0])
+            img_size_list.append(img_size)
         except IOError as e:
             print('Could not open file %s as image.' %img_name)
 
@@ -64,8 +74,9 @@ if __name__ == "__main__":
 
     f = h5py.File(args.gram_dataset_path, 'w')
 
+    f.attrs['img_names'] = img_list
+    f.attrs['img_sizes'] = img_size_list
     for name, m in zip(args.style_layers, mtx):
-        f.attrs['img_names'] = img_list
         f.create_dataset(name, data=m)
 
     f.flush()

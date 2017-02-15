@@ -38,7 +38,8 @@ def save_checkpoint(checkpoint_path, pastiche_net, log):
         for k, v in log['content_loss'].items():
             g2.create_dataset(k, data=v)
         f.attrs['args'] = yaml.dump(log['args'])
-        f.attrs['styles'] = log['styles']
+        f.attrs['style_names'] = log['style_names']
+        f.attrs['style_image_sizes'] = log['style_image_sizes']
 
 def preprocess_input(x):
     return vgg16.preprocess_input(x.astype('float32'))
@@ -89,3 +90,10 @@ def deprocess_image(x):
     x = x[:, :, ::-1]
     x = np.clip(x, 0, 255).astype('uint8')
     return x
+
+def std_input_list(input_list, nb_el, name):
+    if len(input_list) == 1:
+        return [input_list[0] for _ in range(nb_el)]
+    elif len(input_list) != nb_el:
+        raise ValueError('%s list should have length %d, found %d.' %(name, nb_el, len(input_list)))
+    return input_list

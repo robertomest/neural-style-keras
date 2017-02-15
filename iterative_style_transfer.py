@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Iterative style transfer.')
     parser.add_argument('--content_image_path', type=str,
-                        default='content_imgs/tuebingen.jpg',
+                        default='content_imgs/tubingen.jpg',
                         help='Path to the image to transform.')
     parser.add_argument('--style_image_path', type=str,
                         default='style_imgs/starry_night.jpg', nargs='+',
@@ -117,17 +117,25 @@ if __name__ == '__main__':
     total_var_loss = tv_loss(pastiche_image)
 
     # Compute total loss
+    weighted_style_losses = []
+    weighted_content_losses = []
+
     total_loss = K.variable(0.)
     for loss in style_losses:
-        total_loss += args.style_weight * loss
+        weighted_loss = args.style_weight * K.mean(loss)
+        weighted_style_losses.append(weighted_loss)
+        total_loss += weighted_loss
     for loss in content_losses:
-        total_loss += args.content_weight * loss
-    total_loss += args.tv_weight * total_var_loss
+        weighted_loss = args.content_weight * K.mean(loss)
+        weighted_content_losses.append(weighted_loss)
+        total_loss += weighted_loss
+    weighted_tv_loss = args.tv_weight * K.mean(total_var_loss)
+    total_loss += weighted_tv_loss
 
     opt = Adam(lr=args.lr)
     updates = opt.get_updates([pastiche_image], {}, total_loss)
     # List of outputs
-    outputs = [total_loss] + content_losses + style_losses + [total_var_loss]
+    outputs = [total_loss] + weighted_content_losses + weighted_style_losses + [weighted_tv_loss]
 
     # Function that makes a step after backpropping to the image
     make_step = K.function([], outputs, updates)
@@ -142,12 +150,12 @@ if __name__ == '__main__':
             print('Iteration %d/%d' %(i + 1, args.num_iterations))
             N = len(content_losses)
             for j, l in enumerate(out[1:N+1]):
-                print('    Content loss %d: %g' %(j, args.content_weight * l))
+                print('    Content loss %d: %g' %(j, l))
             for j, l in enumerate(out[N+1:-1]):
-                print('    Style loss %d: %g' %(j, args.style_weight * l))
+                print('    Style loss %d: %g' %(j, l))
 
-            print('    Total style loss: %g' %(args.style_weight * sum(out[N+1:-1])))
-            print('    TV loss: %g' %(args.tv_weight * out[-1]))
+            print('    Total style loss: %g' %(sum(out[N+1:-1])))
+            print('    TV loss: %g' %(out[-1]))
             print('    Total loss: %g' %out[0])
             stop_time = time.time()
             print('Did %d iterations in %.2fs.' %(args.print_and_save, stop_time - start_time))

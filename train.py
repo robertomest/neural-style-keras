@@ -16,7 +16,7 @@ import keras.backend as K
 from keras.optimizers import Adam
 from model import pastiche_model
 from training import get_loss_net, get_content_losses, get_style_losses, tv_loss
-from utils import preprocess_input, config_gpu, save_checkpoint
+from utils import preprocess_input, config_gpu, save_checkpoint, std_input_list
 
 if __name__ == '__main__':
     def_cl = ['block3_conv3']
@@ -26,9 +26,9 @@ if __name__ == '__main__':
     # Argument parser
     parser = argparse.ArgumentParser(description='Train a pastiche network.')
     parser.add_argument('--lr', help='Learning rate.', type=float, default=0.001)
-    parser.add_argument('--content_weight', type=float, default=1.)
-    parser.add_argument('--style_weight', type=float, default=1e-4)
-    parser.add_argument('--tv_weight', type=float, default=1e-4)
+    parser.add_argument('--content_weight', type=float, default=[1.], nargs='+')
+    parser.add_argument('--style_weight', type=float, default=[1e-4], nargs='+')
+    parser.add_argument('--tv_weight', type=float, default=[1e-4], nargs='+')
     parser.add_argument('--content_layers', type=str, nargs='+', default=def_cl)
     parser.add_argument('--style_layers', type=str, nargs='+', default=def_sl)
     parser.add_argument('--width_factor', type=int, default=2)
@@ -45,6 +45,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     # Arguments parsed
+
+    # Check loss weights
+    args.style_weight = std_input_list(args.style_weight, args.nb_classes, 'Style weight')
+    args.content_weight = std_input_list(args.content_weight, args.nb_classes, 'Content weight')
+    args.tv_weight = std_input_list(args.tv_weight, args.nb_classes, 'TV weight')
 
     config_gpu(args.gpu, args.allow_growth)
 
@@ -68,6 +73,11 @@ if __name__ == '__main__':
 
 
     print('Setting up training...')
+    # Setup the loss weights as variables
+    content_weights = K.variable(args.content_weight)
+    style_weights = K.variable(args.style_weight)
+    tv_weights = K.variable(args.tv_weight)
+
     style_losses = get_style_losses(outputs_dict, style_targets_dict, args.style_layers,
                                     norm_by_channels=args.norm_by_channels)
 
@@ -76,13 +86,24 @@ if __name__ == '__main__':
     # Use total variation to improve local coherence
     total_var_loss = tv_loss(pastiche_net.output)
 
+
+    weighted_style_losses = []
+    weighted_content_losses = []
+
     # Compute total loss
     total_loss = K.variable(0.)
     for loss in style_losses:
-        total_loss += args.style_weight * loss
+        weighted_loss = K.mean(K.gather(style_weights, class_targets) * loss)
+        weighted_style_losses.append(weighted_loss)
+        total_loss += weighted_loss
+
     for loss in content_losses:
-        total_loss += args.content_weight * loss
-    total_loss += args.tv_weight * total_var_loss
+        weighted_loss = K.mean(K.gather(content_weights, class_targets) * loss)
+        weighted_content_losses.append(weighted_loss)
+        total_loss += weighted_loss
+
+    weighted_tv_loss = K.mean(K.gather(tv_weights, class_targets) * total_var_loss)
+    total_loss += weighted_tv_loss
 
 
     ## Make training function
@@ -100,7 +121,7 @@ if __name__ == '__main__':
     updates = opt.get_updates(params, constraints, total_loss)
 
     # List of outputs
-    outputs = [total_loss] + content_losses + style_losses + [total_var_loss]
+    outputs = [total_loss] + weighted_content_losses + weighted_style_losses + [weighted_tv_loss]
 
     f_train = K.function(inputs, outputs, updates)
 
@@ -115,6 +136,7 @@ if __name__ == '__main__':
     Y = {}
     with h5py.File(args.gram_dataset_path, 'r') as f:
         styles = f.attrs['img_names']
+        style_sizes = f.attrs['img_sizes']
         for k, v in f.iteritems():
             Y[k] = np.array(v)
             if args.norm_by_channels:
@@ -124,7 +146,8 @@ if __name__ == '__main__':
     # Get a log going
     log = {}
     log['args'] = args
-    log['styles'] = styles[:args.nb_classes]
+    log['style_names'] = styles[:args.nb_classes]
+    log['style_image_sizes'] = style_sizes
     log['total_loss'] = []
     log['style_loss'] = {k: [] for k in args.style_layers}
     log['content_loss'] = {k: [] for k in args.content_layers}
@@ -134,6 +157,7 @@ if __name__ == '__main__':
     checkpoint_path = os.path.splitext(args.checkpoint_path)[0]
 
     start_time = time.time()
+    # for it in range(args.num_iterations):
     for it in range(args.num_iterations):
         if batch_idx >= batches_per_epoch:
             print('Epoch done. Going back to the beginning...')
@@ -159,11 +183,11 @@ if __name__ == '__main__':
         log['total_loss'].append(out[0])
         offset = 1
         for i, k in enumerate(args.content_layers):
-            log['content_loss'][k].append(args.content_weight * out[offset + i])
+            log['content_loss'][k].append(out[offset + i])
         offset += len(args.content_layers)
         for i, k in enumerate(args.style_layers):
-            log['style_loss'][k].append(args.style_weight * out[offset + i])
-        log['tv_loss'].append(args.tv_weight * out[-1])
+            log['style_loss'][k].append(out[offset + i])
+        log['tv_loss'].append(out[-1])
 
         stop_time = time.time()
         print('Iteration %d/%d: loss = %f. t = %f (%f)' %(it + 1,
