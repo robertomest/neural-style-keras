@@ -61,6 +61,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # Arguments parsed
 
+    # Split the extension
+    output_path, ext = os.path.splitext(args.output_path)
+    if ext == '':
+        ext = '.png'
     config_gpu(args.gpu, args.allow_growth)
 
     ## Precomputing the targets for content and style
@@ -161,7 +165,7 @@ if __name__ == '__main__':
             print('Did %d iterations in %.2fs.' %(args.print_and_save, stop_time - start_time))
             x = K.get_value(pastiche_image)
             for s in range(nb_styles):
-                fname = args.output_path + '_style%d_%d.png' %(s, (i + 1) / args.print_and_save)
+                fname = output_path + '_style%d_%d%s' %(s, (i + 1) / args.print_and_save, ext)
                 print('Saving image to %s.\n' %fname)
                 img = deprocess_image(x[s:s+1])
                 imsave(fname, img)
