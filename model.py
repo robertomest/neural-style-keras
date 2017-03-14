@@ -12,7 +12,7 @@ from layers import (ReflectionPadding2D, InstanceNormalization,
 from keras.initializations import normal
 
 # Initialize weights with normal distribution with std 0.01
-def weights_init(shape, name=None):
+def weights_init(shape, name=None, dim_ordering=None):
     return normal(shape, scale=0.01, name=name)
 
 
